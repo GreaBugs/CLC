@@ -281,6 +281,26 @@ def setup(args):
     add_fastinst_config(cfg)
     cfg.merge_from_file(args.config_file)
     cfg.merge_from_list(args.opts)
+
+    cfg.SOLVER.IMS_PER_BATCH = 4  # batch_size
+    # cfg.SOLVER.MAX_ITER = 60 * 118000 // cfg.SOLVER.IMS_PER_BATCH
+    cfg.MODEL.DEVICE = "cuda:0"
+    cfg.MODEL.WEIGHTS = "checkpoints/fastinst_R50-vd-dcn_ppm-fpn_x3_640_40.1.pth"
+    cfg.OUTPUT_DIR = "/data3/shenbaoyue/code/FastInst/Fastinst-SQR-select/output/debug"
+
+    # if os.path.exists(cfg.OUTPUT_DIR):
+    #     try:
+    #         shutil.rmtree(cfg.OUTPUT_DIR)
+    #         os.mkdir(cfg.OUTPUT_DIR)
+    #     except FileNotFoundError:
+    #         print("save dir is exist")
+    # else:
+    #     try:
+    #         os.mkdir(cfg.OUTPUT_DIR)
+    #         print("mkdir successful!")
+    #     except FileExistsError:
+    #         print("save dir is exist")
+
     cfg.freeze()
     default_setup(cfg, args)
     # Setup logger for "fastinst" module
@@ -290,8 +310,9 @@ def setup(args):
 
 def main(args):
     cfg = setup(args)
-
+    args.eval_only = True
     if args.eval_only:
+        import pdb;pdb.set_trace()
         model = Trainer.build_model(cfg)
         DetectionCheckpointer(model, save_dir=cfg.OUTPUT_DIR).resume_or_load(
             cfg.MODEL.WEIGHTS, resume=args.resume

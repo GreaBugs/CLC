@@ -224,10 +224,11 @@ class FastInstDecoder(nn.Module):
                                  targets=None, query_locations=None):
         decoder_query_features = self.decoder_query_norm_layers[idx_layer + 1](query_features[:self.num_queries])
         decoder_query_features = decoder_query_features.transpose(0, 1)
-        if self.training or idx_layer + 1 == self.num_layers:
-            outputs_class = self.class_embed_layers[idx_layer + 1](decoder_query_features)
-        else:
-            outputs_class = None
+        # if self.training or idx_layer + 1 == self.num_layers:
+        #     outputs_class = self.class_embed_layers[idx_layer + 1](decoder_query_features)
+        # else:
+        #     outputs_class = None
+        outputs_class = self.class_embed_layers[idx_layer + 1](decoder_query_features)
         outputs_mask_embed = self.mask_embed_layers[idx_layer + 1](decoder_query_features)
         outputs_mask_features = self.mask_features_layers[idx_layer + 1](pixel_features.transpose(0, 1))
 
