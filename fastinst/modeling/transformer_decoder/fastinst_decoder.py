@@ -10,6 +10,59 @@ from .utils import TRANSFORMER_DECODER_REGISTRY, QueryProposal, \
     CrossAttentionLayer, SelfAttentionLayer, FFNLayer, MLP
 
 
+def is_tensor_in_list(target_tensor, tensor_list):
+    for tensor in tensor_list:
+        if torch.equal(target_tensor, tensor):
+            return True
+    return False
+
+
+class DynamicConv(nn.Module):
+
+    def __init__(self):
+        super().__init__()
+
+        self.hidden_dim = 256
+        self.dim_dynamic = 64
+        self.num_dynamic = 2
+        self.num_params = self.hidden_dim * self.dim_dynamic  # 256 * 64 = 16384
+        self.dynamic_layer = nn.Linear(self.hidden_dim, self.num_dynamic * self.num_params)
+
+        self.norm1 = nn.LayerNorm(self.dim_dynamic)
+        self.norm2 = nn.LayerNorm(self.hidden_dim)
+
+        self.activation = nn.ReLU(inplace=True)
+
+        self.out_layer = nn.Linear(self.hidden_dim, self.hidden_dim)
+        self.norm3 = nn.LayerNorm(self.hidden_dim)
+
+    def forward(self, roi_features, pro_features):
+        '''
+        pro_features: (108,  bs, 256)
+        roi_features: (108, bs, 256)
+        '''
+        features = roi_features.view(-1, 1, 256)  # (216, 1, 256)
+        parameters = self.dynamic_layer(pro_features.view(1, -1, 256)).permute(1, 0, 2)  # (216, 1, 32768)
+
+        param1 = parameters[:, :, :self.num_params].view(-1, self.hidden_dim, self.dim_dynamic)   # (108*bs, 256, 64)
+        param2 = parameters[:, :, self.num_params:].view(-1, self.dim_dynamic, self.hidden_dim)   # (108*bs, 64, 256)
+ 
+        features = torch.bmm(features, param1)   # (108, 2, 1, 64)
+        features = self.norm1(features)
+        features = self.activation(features)
+
+        features = torch.bmm(features, param2)   # (108, 2, 1, 256)
+        features = self.norm2(features)
+        features = self.activation(features)
+
+        features = features.flatten(1)
+        features = self.out_layer(features)
+        features = self.norm3(features)
+        features = self.activation(features).view(108, -1, 256)
+
+        return features
+
+
 @TRANSFORMER_DECODER_REGISTRY.register()
 class FastInstDecoder(nn.Module):
 
@@ -46,6 +99,7 @@ class FastInstDecoder(nn.Module):
         self.num_layers = dec_layers
         self.num_queries = num_queries
         self.num_aux_queries = num_aux_queries
+        self.dynamic_conv = DynamicConv()
         self.criterion = None
 
         meta_pos_size = int(round(math.sqrt(self.num_queries)))
@@ -155,6 +209,7 @@ class FastInstDecoder(nn.Module):
             query_features, pixel_features = self.forward_one_layer(
                 query_features, pixel_features, query_pos_embeds, pixel_pos_embeds, attn_mask, i
             )
+            query_features = self.dynamic_conv(query_features, query_feature_memory[-1])
             if i < self.num_layers - 1:
                 outputs_class, outputs_mask, attn_mask, _, _ = self.forward_prediction_heads(
                     query_features, pixel_features, pixel_feature_size, i, return_attn_mask=True,
@@ -164,8 +219,9 @@ class FastInstDecoder(nn.Module):
                     query_features, pixel_features, pixel_feature_size, i,
                     return_gt_attn_mask=self.training, targets=targets, query_locations=query_locations
                 )
-            predictions_class.append(outputs_class)
-            predictions_mask.append(outputs_mask)
+
+            predictions_class.append(outputs_class)  # proposal_calss q0-1;q0-1-2;q0-1-2-3
+            predictions_mask.append(outputs_mask)  # proposal_mask q0-1;q0-1-2;q0-1-2-3
             predictions_matching_index.append(None)
             query_feature_memory.append(query_features)
             pixel_feature_memory.append(pixel_features)

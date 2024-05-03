@@ -13,11 +13,14 @@ try:
 except:
     pass
 
+import os
+os.environ['CUDA_VISIBLE_DEVICES'] = '0,1,2,3'
 import copy
 import itertools
 import logging
 import os
 from collections import OrderedDict
+import shutil
 from typing import Any, Dict, List, Set
 
 import detectron2.utils.comm as comm
@@ -281,6 +284,29 @@ def setup(args):
     add_fastinst_config(cfg)
     cfg.merge_from_file(args.config_file)
     cfg.merge_from_list(args.opts)
+
+    # cfg.SOLVER.IMS_PER_BATCH = 2  # batch_size
+    # cfg.SOLVER.MAX_ITER = 60 * 118000 // cfg.SOLVER.IMS_PER_BATCH
+    # cfg.MODEL.DEVICE = "cuda:1"
+    cfg.MODEL.WEIGHTS = "checkpoints/resnet50d_ra2-464e36ba.pkl"
+    cfg.OUTPUT_DIR = "/data3/shenbaoyue/code/FastInst/Fastinst-SQR-select/output/dynamic"
+
+    # if os.path.exists(cfg.OUTPUT_DIR):
+    #     try:
+    #         shutil.rmtree(cfg.OUTPUT_DIR)
+    #         if os.path.exists(cfg.OUTPUT_DIR):
+    #             pass
+    #         else:
+    #             os.mkdir(cfg.OUTPUT_DIR)
+    #     except FileNotFoundError:
+    #         print("save dir is exist")
+    # else:
+    #     try:
+    #         os.mkdir(cfg.OUTPUT_DIR)
+    #         print("mkdir successful!")
+    #     except FileExistsError:
+    #         print("save dir is exist")
+
     cfg.freeze()
     default_setup(cfg, args)
     # Setup logger for "fastinst" module
@@ -310,6 +336,14 @@ def main(args):
 
 if __name__ == "__main__":
     args = default_argument_parser().parse_args()
+    args.eval_only = False
+    args.num_gpus = 4
+    args.num_machines = 1
+    args.machine_rank = 0
+    args.config_file = "configs/coco/instance-segmentation/fastinst_R50-vd-dcn_ppm-fpn_x3_640.yaml"
+    args.resume = True
+    # args.dist_url = "tcp://172.21.12.19:56666"
+
     print("Command Line Args:", args)
     launch(
         main,
