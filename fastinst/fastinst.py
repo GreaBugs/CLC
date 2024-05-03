@@ -240,19 +240,19 @@ class FastInst(nn.Module):
             processed_results = []
             for mask_cls_result, mask_pred_result, input_per_image, image_size in zip(
                     mask_cls_results, mask_pred_results, batched_inputs, images.image_sizes,
-            ):
-                height = input_per_image.get("height", image_size[0])
-                width = input_per_image.get("width", image_size[1])
+            ):  # [100, 81]; [100, 640, 864]; dict_keys(['image', 'height', 'width']); (640, 853)
+                height = input_per_image.get("height", image_size[0])  # 375
+                width = input_per_image.get("width", image_size[1])  # 500
                 processed_results.append({})
 
-                if self.sem_seg_postprocess_before_inference:
+                if self.sem_seg_postprocess_before_inference:  # True
                     mask_pred_result = retry_if_cuda_oom(sem_seg_postprocess)(
                         mask_pred_result, image_size, height, width
-                    )
-                    mask_cls_result = mask_cls_result.to(mask_pred_result)
+                    )  # torch.Size([100, 375, 500])
+                    mask_cls_result = mask_cls_result.to(mask_pred_result)  # torch.Size([100, 81])
 
                 # semantic segmentation inference
-                if self.semantic_on:
+                if self.semantic_on:  # False
                     r = retry_if_cuda_oom(self.semantic_inference)(mask_cls_result, mask_pred_result)
                     if not self.sem_seg_postprocess_before_inference:
                         r = retry_if_cuda_oom(sem_seg_postprocess)(r, image_size, height, width)
@@ -264,7 +264,7 @@ class FastInst(nn.Module):
                     processed_results[-1]["panoptic_seg"] = panoptic_r
 
                 # instance segmentation inference
-                if self.instance_on:
+                if self.instance_on:  # True
                     instance_r = retry_if_cuda_oom(self.instance_inference)(mask_cls_result, mask_pred_result)
                     processed_results[-1]["instances"] = instance_r
 

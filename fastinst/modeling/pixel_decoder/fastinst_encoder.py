@@ -102,7 +102,7 @@ class BaseFPN(nn.Module):
         num_cur_levels = 0
         # Reverse feature maps into top-down order (from low to high resolution)
         for idx, f in enumerate(self.in_features[::-1]):
-            x = features[f]
+            x = features[f]  # torch.Size([1, 2048, 20, 27])  ['res5', 'res4', 'res3']
             lateral_conv = self.lateral_convs[idx]
             output_conv = self.output_convs[idx]
             if idx == 0:
@@ -180,15 +180,15 @@ class PyramidPoolingModuleFPN(BaseFPN):
         return ret
 
     def forward_features(self, features):
-        multi_scale_features = []
-        num_cur_levels = 0
+        multi_scale_features = []  # torch.Size([1, 256, 160, 216]) torch.Size([1, 512, 80, 108])
+        num_cur_levels = 0         # torch.Size([1, 1024, 40, 54])  torch.Size([1, 2048, 20, 27])
         # Reverse feature maps into top-down order (from low to high resolution)
         for idx, f in enumerate(self.in_features[::-1]):
             x = features[f]
             lateral_conv = self.lateral_convs[idx]
             output_conv = self.output_convs[idx]
             if idx == 0:
-                y = self.ppm(lateral_conv(x))
+                y = self.ppm(lateral_conv(x))  # torch.Size([1, 256, 20, 27])
             else:
                 cur_fpn = lateral_conv(x)
                 y = cur_fpn + F.interpolate(y, size=cur_fpn.shape[-2:], mode='bilinear', align_corners=False)

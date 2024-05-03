@@ -99,11 +99,24 @@ def test_opencv_video_format(codec, file_ext):
 if __name__ == "__main__":
     mp.set_start_method("spawn", force=True)
     args = get_parser().parse_args()
+    args.input = [# "/data3/shenbaoyue/code/FastInst/Fastinst-SQR-select/figures/000000405544.jpg",
+        # "/data3/shenbaoyue/code/FastInst/Fastinst-SQR-select/figures/000000000036.jpg",
+        # "/data3/shenbaoyue/code/FastInst/Fastinst-SQR-select/figures/000000018380.jpg",
+        # "/data3/shenbaoyue/code/FastInst/Fastinst-SQR-select/figures/000000144003.jpg",
+        # "/data3/shenbaoyue/code/FastInst/Fastinst-SQR-select/figures/000000184791.jpg",
+        # "/data3/shenbaoyue/code/FastInst/Fastinst-SQR-select/figures/000000405544.jpg",
+        # "/data3/shenbaoyue/code/FastInst/Fastinst-SQR-select/figures/000000545959.jpg",
+        "/data3/shenbaoyue/code/FastInst/Fastinst-SQR-select/figures/000000572517.jpg"
+                  ]
+
     setup_logger(name="fvcore")
     logger = setup_logger()
     logger.info("Arguments: " + str(args))
 
     cfg = setup_cfg(args)
+    cfg.defrost()
+    cfg.MODEL.WEIGHTS = "/data3/shenbaoyue/code/FastInst/Fastinst-SQR-select/checkpoints/fastinst_R50-vd-dcn_ppm-fpn_x3_640_40.5457.pth"
+    cfg.freeze()
 
     demo = VisualizationDemo(cfg)
 

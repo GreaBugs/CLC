@@ -59,3 +59,10 @@ class FastInstHead(nn.Module):
         mask_features, multi_scale_features = self.pixel_decoder.forward_features(features)
         predictions = self.predictor(multi_scale_features, mask_features, targets)
         return predictions
+
+# predictions['proposal_cls_logits'].shape: torch.Size([1, 81, 40, 54])
+# predictions['query_locations']: None
+# predictions['pred_logits'].shape: torch.Size([1, 100, 81])
+# predictions['pred_masks'].shape: torch.Size([1, 100, 80, 108])
+# predictions['pred_matching_indices']: None
+# predictions['aux_outputs']: dict_keys(['query_locations', 'pred_logits', 'pred_masks', 'pred_matching_indices'])
