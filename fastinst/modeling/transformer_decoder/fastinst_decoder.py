@@ -1,5 +1,9 @@
+from copy import deepcopy
 import math
 
+import cv2
+from matplotlib import pyplot as plt
+import numpy as np
 import torch
 from detectron2.config import configurable
 from torch import nn
@@ -222,25 +226,25 @@ class FastInstDecoder(nn.Module):
     def forward_prediction_heads(self, query_features, pixel_features, pixel_feature_size, idx_layer,
                                  return_attn_mask=False, return_gt_attn_mask=False,
                                  targets=None, query_locations=None):
-        decoder_query_features = self.decoder_query_norm_layers[idx_layer + 1](query_features[:self.num_queries])
-        decoder_query_features = decoder_query_features.transpose(0, 1)
+        decoder_query_features = self.decoder_query_norm_layers[idx_layer + 1](query_features[:self.num_queries])  # query_features(108, bs, 256)
+        decoder_query_features = decoder_query_features.transpose(0, 1)  # (1, 100, 256)
         if self.training or idx_layer + 1 == self.num_layers:
-            outputs_class = self.class_embed_layers[idx_layer + 1](decoder_query_features)
+            outputs_class = self.class_embed_layers[idx_layer + 1](decoder_query_features)   # (bs, 100, 81)
         else:
             outputs_class = None
-        outputs_mask_embed = self.mask_embed_layers[idx_layer + 1](decoder_query_features)
-        outputs_mask_features = self.mask_features_layers[idx_layer + 1](pixel_features.transpose(0, 1))
+        outputs_mask_embed = self.mask_embed_layers[idx_layer + 1](decoder_query_features)  # (1, 100, 256)
+        outputs_mask_features = self.mask_features_layers[idx_layer + 1](pixel_features.transpose(0, 1)) # (1, 3744, 256)
 
-        outputs_mask = torch.einsum("bqc,blc->bql", outputs_mask_embed, outputs_mask_features)
-        outputs_mask = outputs_mask.reshape(-1, self.num_queries, *pixel_feature_size)
+        outputs_mask = torch.einsum("bqc,blc->bql", outputs_mask_embed, outputs_mask_features)  # (1, 100, 3744)  这个操作通常用于计算查询与特征之间的相似度、匹配度或注意力权重。通过执行张量乘法，可以将查询与特征进行对应位置的相关性计算，并得到输出张量作为后续任务的结果或输入。
+        outputs_mask = outputs_mask.reshape(-1, self.num_queries, *pixel_feature_size)  #  (bs, 100, 52, 72)
 
-        if return_attn_mask:
+        if return_attn_mask:  
             # outputs_mask.shape: b, q, h, w
-            attn_mask = F.pad(outputs_mask, (0, 0, 0, 0, 0, self.num_aux_queries), "constant", 1)
-            attn_mask = (attn_mask < 0.).flatten(2)  # b, q, hw
-            invalid_query = attn_mask.all(-1, keepdim=True)  # b, q, 1
+            attn_mask = F.pad(outputs_mask, (0, 0, 0, 0, 0, self.num_aux_queries), "constant", 1)  # (1, 108, 52, 72)   self.num_aux_queries
+            attn_mask = (attn_mask < 0.).flatten(2)  # b, q, hw   (1, 108, 3744)
+            invalid_query = attn_mask.all(-1, keepdim=True)  # b, q, 1    (1, 108, 1)
             attn_mask = (~ invalid_query) & attn_mask  # b, q, hw
-            attn_mask = attn_mask.unsqueeze(1).repeat(1, self.num_heads, 1, 1).flatten(0, 1)
+            attn_mask = attn_mask.unsqueeze(1).repeat(1, self.num_heads, 1, 1).flatten(0, 1)  # (8, 108, 3744)
             attn_mask = attn_mask.detach()
         else:
             attn_mask = None
@@ -249,29 +253,95 @@ class FastInstDecoder(nn.Module):
             assert targets is not None and query_locations is not None
             matching_indices = self.criterion.matcher(
                 {'pred_logits': outputs_class, 'pred_masks': outputs_mask,
-                 'query_locations': query_locations}, targets)
+                 'query_locations': query_locations}, targets)   # matching_indice是匹配好的真值索引
             src_idx = self.criterion._get_src_permutation_idx(matching_indices)
             tgt_idx = self.criterion._get_tgt_permutation_idx(matching_indices)
 
-            mask = [t["masks"] for t in targets]
+            mask = [t["masks"] for t in targets]  # GT-mask  list[0]:(4, 416, 576)
+            #*************************************************
+            # for j in range(len(mask)):
+            #     for i in range(mask[j].shape[0]):
+            #         visual_gt_mask = mask[j][i, :, :]  # [1, 416, 576]
+            #         visual_gt_mask = visual_gt_mask.view((mask[j].shape[1], mask[j].shape[2]))  # [416, 576]
+            #         visual_gt_mask = visual_gt_mask.cpu()
+            #         visual_gt_mask = visual_gt_mask.numpy()
+            #         # 将布尔类型的掩码数据转换为整数类型的图像数据
+            #         mask_data = np.where(visual_gt_mask, 255, 0).astype(np.uint8)
+            #         # 显示图像
+            #         plt.imshow(mask_data, cmap='gray')
+            #         plt.axis('off')
+            #         plt.suptitle('GT_mask')
+            #         plt.show()
+            #*************************************************
+            shen_masks = deepcopy(mask)
+
+            # 边缘提取函数
+            def mask_augmentation(shen_masks):
+                num_obj, h, w = shen_masks.shape
+                shen_masks = shen_masks.cpu()
+                result_masks = np.zeros_like(shen_masks, dtype=np.uint8)
+                kernel = np.ones((3, 3), dtype=np.uint8)
+
+                # 对每个目标的掩码进行膨胀处理
+                for i in range(num_obj):
+                    iteration = np.random.randint(1, 2)
+                    shen_mask = shen_masks[i]
+                    raw_mask = shen_mask.cpu().numpy().astype(np.uint8)
+                    p_mask = np.random.rand()
+                    if p_mask < 0.7:
+                        result_masks[i] = shen_mask
+                        # result_masks[i] = cv2.erode(raw_mask, kernel, iterations=iteration1)
+                    else:
+                        # area = torch.sum(shen_mask)
+                        result_masks[i] = cv2.erode(raw_mask, kernel, iterations=iteration)
+                return result_masks
+
+            # *********************************************************************
+            result_masks_list = []  # erode mask
+            for bs_mask in shen_masks:
+                bs_augmasks = mask_augmentation(bs_mask)
+                bs_augmasks = torch.from_numpy(bs_augmasks)
+                bs_augmasks = bs_augmasks.to(torch.bool).to(mask[0].device)
+                result_masks_list.append(bs_augmasks)
+            # ************************************************
+            # 可视化
+            # for j in range(len(result_masks_list)):
+            #     for i in range(result_masks_list[j].shape[0]):
+            #         visual_gt_mask = result_masks_list[j][i, :, :]  # [1, 416, 576]
+            #         visual_gt_mask = visual_gt_mask.view((result_masks_list[j].shape[1], result_masks_list[j].shape[2]))  # [416, 576]
+            #         visual_gt_mask = visual_gt_mask.cpu()
+            #         visual_gt_mask = visual_gt_mask.numpy()
+            #         # 将布尔类型的掩码数据转换为整数类型的图像数据
+            #         mask_data = np.where(visual_gt_mask, 255, 0).astype(np.uint8)
+            #         # 显示图像
+            #         plt.imshow(mask_data, cmap='gray')
+            #         plt.axis('off')
+            #         plt.suptitle('result_masks')
+            #         plt.show()
+            # ************************************************
+            mask = result_masks_list[:]
+            del result_masks_list
+            del shen_masks
+
             target_mask, valid = nested_tensor_from_tensor_list(mask).decompose()
-            if target_mask.shape[1] > 0:
-                target_mask = target_mask.to(outputs_mask)
-                target_mask = F.interpolate(target_mask, size=pixel_feature_size, mode="nearest").bool()
+            # Tensor[1, 4, 416, 576]   Tensor[1, 416, 576].bool
+            if target_mask.shape[1] > 0:  # num_obj > 0
+                target_mask = target_mask.to(outputs_mask)  # target_mask:[1, 4, 416, 576]  outputs_mask:[1, 100, 52, 72]
+                target_mask = F.interpolate(target_mask, size=pixel_feature_size, mode="nearest").bool()  # [1, 4, 52, 72]
             else:
                 target_mask_size = [target_mask.shape[0], target_mask.shape[1], *pixel_feature_size]
                 target_mask = torch.zeros(size=target_mask_size, device=outputs_mask.device).bool()
 
-            gt_attn_mask_size = [
+            gt_attn_mask_size = [   # [2, 108, 56, 80]  [bs, num_query + num_aux_query, h, w]
                 outputs_mask.shape[0], self.num_queries + self.num_aux_queries, *pixel_feature_size
             ]
-            gt_attn_mask = torch.zeros(size=gt_attn_mask_size, device=outputs_mask.device).bool()
+            gt_attn_mask = torch.zeros(size=gt_attn_mask_size, device=outputs_mask.device).bool()  # [2, 108, 56, 80]
             gt_attn_mask[src_idx] = ~ target_mask[tgt_idx]
-            gt_attn_mask = gt_attn_mask.flatten(2)
+            gt_attn_mask = gt_attn_mask.flatten(2)  # [2, 108, 4480]
 
-            invalid_gt_query = gt_attn_mask.all(-1, keepdim=True)  # b, n, 1
-            gt_attn_mask = (~invalid_gt_query) & gt_attn_mask
-            gt_attn_mask = gt_attn_mask.unsqueeze(1).repeat(1, self.num_heads, 1, 1).flatten(0, 1)
+            invalid_gt_query = gt_attn_mask.all(-1, keepdim=True)  # b, n, 1  [1, 108, 1]
+            gt_attn_mask = (~invalid_gt_query) & gt_attn_mask  # b, n, h*w  [1, 108, 3744]
+            gt_attn_mask = gt_attn_mask.unsqueeze(1).repeat(1, self.num_heads, 1, 1).flatten(0, 1)  # [8, 108, 3744]
             gt_attn_mask = gt_attn_mask.detach()
         else:
             matching_indices = None
