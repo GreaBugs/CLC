@@ -52,3 +52,5 @@ _darcs
 /projects/*/datasets
 /models
 /snippet
+detectron2/
+tools/read_pkl.py

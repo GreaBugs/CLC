@@ -12,11 +12,13 @@ try:
     warnings.filterwarnings('ignore', category=ShapelyDeprecationWarning)
 except:
     pass
-
+import os
+# os.environ['CUDA_VISIBLE_DEVICES'] = '0,1,2,3'
 import copy
 import itertools
 import logging
 import os
+import shutil
 from collections import OrderedDict
 from typing import Any, Dict, List, Set
 
@@ -41,7 +43,10 @@ from detectron2.evaluation import (
     SemSegEvaluator,
     verify_results,
 )
+# from detectron2.projects.deeplab import add_deeplab_config, build_lr_scheduler
 from detectron2.projects.deeplab import add_deeplab_config, build_lr_scheduler
+# from detectron2.projects.DeepLab.deeplab.config import add_deeplab_config
+# from detectron2.projects.DeepLab.deeplab.build_solver import build_lr_scheduler
 from detectron2.solver.build import maybe_add_gradient_clipping
 from detectron2.utils.logger import setup_logger
 
@@ -281,6 +286,30 @@ def setup(args):
     add_fastinst_config(cfg)
     cfg.merge_from_file(args.config_file)
     cfg.merge_from_list(args.opts)
+
+    cfg.SOLVER.IMS_PER_BATCH = 3  # batch_size  SRTS
+    # cfg.SOLVER.MAX_ITER = 60 * 118000 // cfg.SOLVER.IMS_PER_BATCH
+    cfg.MODEL.DEVICE = "cuda:0"
+    cfg.MODEL.WEIGHTS = "checkpoints/resnet50d_ra2-464e36ba.pkl"
+    cfg.OUTPUT_DIR = "/data3/shenbaoyue/code/FastInst/Fastinst-SQR-select/output/MaskAug"
+
+    # if os.path.exists(cfg.OUTPUT_DIR):
+    #     interface = input("{} is exist! 是否删除重新创建?(Y/N)".format(cfg.OUTPUT_DIR))
+    #     if interface == "Y":
+    #         try:
+    #             shutil.rmtree(cfg.OUTPUT_DIR)
+    #             os.mkdir(cfg.OUTPUT_DIR)
+    #         except FileNotFoundError:
+    #             print("save dir is exist")
+    #     else:
+    #         raise SystemExit
+    # else:
+    #     try:
+    #         os.mkdir(cfg.OUTPUT_DIR)
+    #         print("mkdir successful!")
+    #     except FileExistsError:
+    #         print("save dir is exist")
+
     cfg.freeze()
     default_setup(cfg, args)
     # Setup logger for "fastinst" module
@@ -310,6 +339,15 @@ def main(args):
 
 if __name__ == "__main__":
     args = default_argument_parser().parse_args()
+
+    args.eval_only = False
+    args.num_gpus = 1
+    args.num_machines = 1
+    args.machine_rank = 0
+    args.config_file = "configs/coco/instance-segmentation/fastinst_R50-vd-dcn_ppm-fpn_x3_640.yaml"
+    args.resume = True
+    # args.dist_url = "tcp://172.21.12.19:56666"
+
     print("Command Line Args:", args)
     launch(
         main,
