@@ -235,6 +235,10 @@ class FFNLayer(nn.Module):
         self.dropout = nn.Dropout(dropout)
         self.linear2 = nn.Linear(dim_feedforward, d_model)
 
+        self.linear3 = nn.Linear(d_model * 2, dim_feedforward)
+        self.linear4 = nn.Linear(dim_feedforward, d_model * 2)
+        self.linear5 = nn.Linear(d_model * 2, d_model)
+
         self.norm = nn.LayerNorm(d_model)
 
         self.activation = _get_activation_fn(activation)
@@ -251,10 +255,19 @@ class FFNLayer(nn.Module):
         return tensor if pos is None else tensor + pos
 
     def forward_post(self, tgt):
-        tgt2 = self.linear2(self.dropout(self.activation(self.linear1(tgt))))
-        tgt = tgt + self.dropout(tgt2)
-        tgt = self.norm(tgt)
-        return tgt
+        if tgt.shape[2] == 256:
+            tgt2 = self.linear2(self.dropout(self.activation(self.linear1(tgt))))
+            tgt = tgt + self.dropout(tgt2)
+
+            tgt = self.norm(tgt)
+            return tgt
+        elif tgt.shape[2] == 512:
+            tgt2 = self.linear4(self.dropout(self.activation(self.linear3(tgt))))
+            tgt = tgt + self.dropout(tgt2)
+            tgt = self.linear5(tgt)
+
+            tgt = self.norm(tgt)
+            return tgt
 
     def forward_pre(self, tgt):
         tgt2 = self.norm(tgt)
