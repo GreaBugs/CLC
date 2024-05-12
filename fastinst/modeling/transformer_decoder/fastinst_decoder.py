@@ -69,7 +69,7 @@ class FastInstDecoder(nn.Module):
             )
             self.transformer_query_self_attention_layers.append(
                 SelfAttentionLayer(
-                    d_model=hidden_dim, nhead=nheads, dropout=0.0, normalize_before=pre_norm
+                    d_model=hidden_dim * 2, nhead=nheads, dropout=0.0, normalize_before=pre_norm
                 )
             )
             self.transformer_query_ffn_layers.append(
@@ -150,10 +150,11 @@ class FastInstDecoder(nn.Module):
         predictions_matching_index = [None]
         query_feature_memory = [query_features]
         pixel_feature_memory = [pixel_features]
+        query_pos_embeds_memory = [query_pos_embeds]
 
         for i in range(self.num_layers):
             query_features, pixel_features = self.forward_one_layer(
-                query_features, pixel_features, query_pos_embeds, pixel_pos_embeds, attn_mask, i
+                query_features, pixel_features, query_pos_embeds, pixel_pos_embeds, attn_mask, i, query_feature_memory, query_pos_embeds_memory
             )
             if i < self.num_layers - 1:
                 outputs_class, outputs_mask, attn_mask, _, _ = self.forward_prediction_heads(
@@ -177,7 +178,7 @@ class FastInstDecoder(nn.Module):
             for i in range(self.num_layers):
                 query_features, pixel_features = self.forward_one_layer(
                     query_feature_memory[i + 1], pixel_feature_memory[i + 1], query_pos_embeds,
-                    pixel_pos_embeds, gt_attn_mask, i
+                    pixel_pos_embeds, gt_attn_mask, i, query_feature_memory, query_pos_embeds_memory
                 )
 
                 outputs_class, outputs_mask, _, _, _ = self.forward_prediction_heads(
@@ -204,7 +205,8 @@ class FastInstDecoder(nn.Module):
         }
         return out
 
-    def forward_one_layer(self, query_features, pixel_features, query_pos_embeds, pixel_pos_embeds, attn_mask, i):
+    def forward_one_layer(self, query_features, pixel_features, query_pos_embeds, pixel_pos_embeds, attn_mask, i, query_feature_memory,
+                          query_pos_embeds_memory):
         pixel_features = self.transformer_mask_cross_attention_layers[i](
             pixel_features, query_features, query_pos=pixel_pos_embeds, pos=query_pos_embeds
         )
@@ -212,10 +214,12 @@ class FastInstDecoder(nn.Module):
 
         query_features = self.transformer_query_cross_attention_layers[i](
             query_features, pixel_features, memory_mask=attn_mask, query_pos=query_pos_embeds, pos=pixel_pos_embeds
-        )
+        ) # (108, bs, 256)
+        query_features = torch.cat([query_feature_memory[-1], query_features], dim=-1)  # pre_query & query  (108, bs, 512)
+        query_pos_embeds = torch.cat([query_pos_embeds_memory[-1], query_pos_embeds], dim=-1)
         query_features = self.transformer_query_self_attention_layers[i](
             query_features, query_pos=query_pos_embeds
-        )
+        )  
         query_features = self.transformer_query_ffn_layers[i](query_features)
         return query_features, pixel_features
 
