@@ -40,6 +40,10 @@ def setup(args):
         cfg.merge_from_file(args.config_file)
         cfg.DATALOADER.NUM_WORKERS = 0
         cfg.merge_from_list(args.opts)
+
+        cfg.MODEL.WEIGHTS = "checkpoints/fastinst_R50-vd-dcn_ppm-fpn_x3_640_40.1.pth"
+        cfg.OUTPUT_DIR = "/data3/shenbaoyue/code/FastInst/Fastinst-SQR-select/output/Analyze_model/test"
+
         cfg.freeze()
     else:
         cfg = LazyConfig.load(args.config_file)
@@ -164,7 +168,8 @@ $ ./analyze_model.py --num-inputs 100 --tasks flop \\
     parser.add_argument(
         "--tasks",
         choices=["flop", "activation", "parameter", "structure", "speed"],
-        required=True,
+        default=["parameter", "flop", "speed"],
+        required=False,
         nargs="+",
     )
     parser.add_argument(
@@ -183,7 +188,7 @@ $ ./analyze_model.py --num-inputs 100 --tasks flop \\
     args = parser.parse_args()
     assert not args.eval_only
     assert args.num_gpus == 1
-
+    args.config_file = "configs/coco/instance-segmentation/fastinst_R50-vd-dcn_ppm-fpn_x3_640.yaml"
     cfg = setup(args)
 
     for task in args.tasks:
