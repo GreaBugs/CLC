@@ -1,4 +1,4 @@
-# FastInst: A Simple Query-Based Model for Real-Time Instance Segmentation
+# CLC: A Simple Query-Based Model for Real-Time Instance Segmentation
 
 [[`arXiv`](https://arxiv.org/abs/2303.08594)] [[`BibTeX`](#CitingFastInst)]
 
