@@ -2,8 +2,6 @@
 
 [[`arXiv`](https://arxiv.org/abs/2303.08594)] [[`BibTeX`](#CitingFastInst)]
 
-<p align="center"><img width="100%" src="figures/fastinst.png" /></p>
-
 ### Features
 
 * A simple query-based model for fast instance segmentation.
